@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardHeader, CardBody, Button, Modal } from '../components/common';
 import { useLeads } from '../contexts/AppContext';
-import { Upload, FileText, AlertTriangle, Check, X, Download } from 'lucide-react';
+import { Upload, FileText, AlertTriangle, Download, X } from 'lucide-react';
 
 interface ParsedLead {
   project_name: string;
@@ -9,9 +9,40 @@ interface ParsedLead {
   industry: string;
   shutdown_evidence: string;
   priority: 'urgent' | 'high' | 'medium' | 'low';
-  funding_info?: { round: string; amount: string };
+  funding_round?: string;
+  funding_amount?: string;
   isDuplicate: boolean;
-  duplicateWith?: string;
+}
+
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if ((char === ',' || char === '\t') && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function parseCSV(content: string): string[][] {
+  const lines = content.split(/\r?\n/).filter(line => line.trim());
+  return lines.map(line => parseCSVLine(line));
 }
 
 export function BatchImport() {
@@ -21,6 +52,7 @@ export function BatchImport() {
   const [selectedRows, setSelectedRows] = React.useState<Set<number>>(new Set());
   const [importMode, setImportMode] = React.useState<'paste' | 'file'>('paste');
   const [pasteContent, setPasteContent] = React.useState('');
+  const [headers, setHeaders] = React.useState<string[]>([]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -29,75 +61,92 @@ export function BatchImport() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
-      parseContent(content);
+      parseAndPreview(content, file.name);
     };
     reader.readAsText(file);
   };
 
   const handlePaste = () => {
     if (pasteContent.trim()) {
-      parseContent(pasteContent);
+      parseAndPreview(pasteContent, 'pasted');
     }
   };
 
-  const parseContent = (content: string) => {
-    const lines = content.split('\n').filter(line => line.trim());
-    const parsed: ParsedLead[] = [];
-    const existingNames = new Set(leads.map(l => l.project_name.toLowerCase()));
+  const parseAndPreview = (content: string, filename: string) => {
+    const rows = parseCSV(content);
+    if (rows.length < 2) {
+      alert('数据格式不正确，至少需要表头和一行数据');
+      return;
+    }
 
-    lines.forEach((line, index) => {
-      const parts = line.split(/[,\t]/).map(p => p.trim());
-      if (parts.length >= 4) {
-        const name = parts[0];
-        const isDuplicate = existingNames.has(name.toLowerCase());
-        
-        parsed.push({
-          project_name: name,
-          website_status: (parts[1] === '关闭' || parts[1] === 'shutdown' ? 'shutdown' : 
-                          parts[1] === '跳转' || parts[1] === 'redirect' ? 'redirect' : 'normal') as any,
-          industry: mapIndustry(parts[2]),
-          shutdown_evidence: parts[3] || '待补充',
-          priority: mapPriority(parts[4] || ''),
-          funding_info: parts[5] ? parseFunding(parts[5]) : undefined,
-          isDuplicate,
-          duplicateWith: isDuplicate ? name : undefined,
-        });
+    setHeaders(rows[0]);
+    const existingNames = new Set(leads.map(l => l.project_name.toLowerCase()));
+    const parsed: ParsedLead[] = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.length < 4 || !row[0].trim()) continue;
+
+      const name = row[0].trim();
+      const statusRaw = (row[1] || '').toLowerCase();
+      const industryRaw = row[2] || '';
+      const evidence = row[3] || '';
+      const priorityRaw = (row[4] || '').toLowerCase();
+      const fundingRaw = row[5] || '';
+
+      const isShutdown = statusRaw.includes('关闭') || statusRaw.includes('shutdown') || statusRaw.includes('关闭') || statusRaw.includes('已关闭');
+      const isRedirect = statusRaw.includes('跳转') || statusRaw.includes('redirect') || statusRaw.includes('重定向');
+      
+      let fundingRound = '', fundingAmount = '';
+      const fundingMatch = fundingRaw.match(/(.+?)[:：]\s*(.+)/);
+      if (fundingMatch) {
+        fundingRound = fundingMatch[1].trim();
+        fundingAmount = fundingMatch[2].trim();
       }
-    });
+
+      parsed.push({
+        project_name: name,
+        website_status: isShutdown ? 'shutdown' : isRedirect ? 'redirect' : 'normal',
+        industry: mapIndustry(industryRaw),
+        shutdown_evidence: evidence || '待补充',
+        priority: mapPriority(priorityRaw),
+        funding_round: fundingRound || undefined,
+        funding_amount: fundingAmount || undefined,
+        isDuplicate: existingNames.has(name.toLowerCase()),
+      });
+    }
 
     setParsedData(parsed);
-    setSelectedRows(new Set(parsed.map((_, i) => i)));
+    setSelectedRows(new Set(parsed.map((_, idx) => idx)));
+    setImportMode(filename.endsWith('.csv') || filename === 'pasted' ? 'paste' : 'file');
   };
 
-  const mapIndustry = (value: string): any => {
-    const map: Record<string, any> = {
-      '电商': 'e-commerce', '电子商务': 'e-commerce',
+  const mapIndustry = (value: string): string => {
+    const map: Record<string, string> = {
+      '电商': 'e-commerce', '电子商务': 'e-commerce', 'ecommerce': 'e-commerce',
       '社交': 'social',
-      '金融': 'finance', 'Fintech': 'finance',
+      '金融': 'finance', 'fintech': 'finance',
       '教育': 'education', '在线教育': 'education',
       '医疗': 'healthcare', '健康': 'healthcare',
       '旅游': 'travel', '出行': 'travel',
       '餐饮': 'food', '美食': 'food',
-      '文娱': 'entertainment', '娱乐': 'entertainment',
-      '科技': 'technology',
+      '文娱': 'entertainment', '娱乐': 'entertainment', '直播': 'entertainment',
+      '科技': 'technology', '工具': 'technology',
       '汽车': 'automotive',
+      '地产': 'real-estate', '房地产': 'real-estate',
     };
-    return map[value] || 'other';
+    const lower = value.toLowerCase();
+    return map[lower] || map[value] || 'other';
   };
 
   const mapPriority = (value: string): any => {
     const map: Record<string, any> = {
-      '紧急': 'urgent', '高': 'high', '中': 'medium', '低': 'low',
+      '紧急': 'urgent', 'urgent': 'urgent',
+      '高': 'high', 'high': 'high',
+      '中': 'medium', 'medium': 'medium',
+      '低': 'low', 'low': 'low',
     };
-    return map[value] || 'medium';
-  };
-
-  const parseFunding = (value: string) => {
-    const match = value.match(/(.+?)\s*[:：]\s*(.+)/);
-    if (match) {
-      return { round: match[1].trim(), amount: match[2].trim() };
-    }
-    return { round: '未知', amount: value };
+    return map[value.toLowerCase()] || 'medium';
   };
 
   const toggleRow = (index: number) => {
@@ -123,12 +172,14 @@ export function BatchImport() {
       .filter((_, i) => selectedRows.has(i) && !_.isDuplicate)
       .map(item => ({
         project_name: item.project_name,
-        website_status: item.website_status,
+        website_status: item.website_status as any,
         screenshots: [],
         news_sources: [],
-        funding_info: item.funding_info,
+        funding_info: item.funding_round && item.funding_amount 
+          ? { round: item.funding_round, amount: item.funding_amount }
+          : undefined,
         shutdown_evidence: item.shutdown_evidence,
-        industry: item.industry,
+        industry: item.industry as any,
         credibility: 'medium' as any,
         priority: item.priority,
         status: 'new' as any,
@@ -141,20 +192,21 @@ export function BatchImport() {
       setParsedData([]);
       setSelectedRows(new Set());
       setPasteContent('');
+      setHeaders([]);
     }
   };
 
   const downloadTemplate = () => {
-    const template = `项目名称\t官网状态\t行业\t停运证据\t优先级\t融资信息
-小蓝单车\t关闭\t出行\t官方宣布停止运营\t高\tB轮:1亿
-闪电购\t关闭\t电商\t平台倒闭，供应商欠款\t高\t天使轮:500万
-美味到家\t关闭\t餐饮\t停止运营，员工欠薪\t中\tA轮:2000万`;
+    const template = `项目名称,官网状态,行业,停运证据,优先级,融资信息
+小蓝单车,关闭,出行,官方宣布停止运营,高,B轮:1亿
+闪电购,关闭,电商,平台倒闭供应商欠款,高,天使轮:500万
+美味到家,关闭,餐饮,停止运营员工欠薪,中,A轮:2000万`;
     
-    const blob = new Blob([template], { type: 'text/plain' });
+    const blob = new Blob([template], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '批量导入模板.txt';
+    a.download = '批量导入模板.csv';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -196,10 +248,7 @@ export function BatchImport() {
               <textarea
                 value={pasteContent}
                 onChange={(e) => setPasteContent(e.target.value)}
-                placeholder="粘贴项目信息，每行一条，格式：项目名称,官网状态,行业,停运证据,优先级,融资信息
-示例：
-小蓝单车,关闭,出行,官方宣布停止运营,高,B轮:1亿
-闪电购,关闭,电商,平台倒闭,高,天使轮:500万"
+                placeholder={`粘贴项目信息，每行一条，格式：\n项目名称,官网状态,行业,停运证据,优先级,融资信息\n示例：\n小蓝单车,关闭,出行,官方宣布停止运营,高,B轮:1亿\n闪电购,关闭,电商,平台倒闭,高,天使轮:500万`}
                 className="w-full h-40 p-3 border border-gray-300 rounded-lg resize-none font-mono text-sm"
               />
               <Button onClick={handlePaste} className="mt-2">
@@ -208,13 +257,13 @@ export function BatchImport() {
             </div>
           ) : (
             <div>
-              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-accent">
+              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-accent hover:bg-gray-50 transition-colors">
                 <Upload size={32} className="text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500">点击上传文件</p>
-                <p className="text-xs text-gray-400 mt-1">支持 TXT, CSV, XLSX</p>
+                <p className="text-sm text-gray-500">点击上传 CSV 文件</p>
+                <p className="text-xs text-gray-400 mt-1">支持 CSV 格式（Excel 另存为 CSV）</p>
                 <input
                   type="file"
-                  accept=".txt,.csv,.xlsx"
+                  accept=".csv,text/csv"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -294,7 +343,16 @@ export function BatchImport() {
                              item.website_status === 'redirect' ? '跳转' : '正常'}
                           </span>
                         </td>
-                        <td className="p-2">{item.industry}</td>
+                        <td className="p-2">{item.industry === 'e-commerce' ? '电商' : 
+                          item.industry === 'social' ? '社交' :
+                          item.industry === 'finance' ? '金融' :
+                          item.industry === 'education' ? '教育' :
+                          item.industry === 'healthcare' ? '医疗' :
+                          item.industry === 'travel' ? '出行' :
+                          item.industry === 'food' ? '餐饮' :
+                          item.industry === 'entertainment' ? '文娱' :
+                          item.industry === 'technology' ? '科技' :
+                          item.industry === 'automotive' ? '汽车' : '其他'}</td>
                         <td className="p-2">
                           <span className={`px-2 py-0.5 rounded text-xs ${
                             item.priority === 'urgent' ? 'bg-red-100 text-red-700' :
@@ -318,7 +376,7 @@ export function BatchImport() {
                   取消
                 </Button>
                 <Button onClick={handleImport} disabled={selectedRows.size === 0}>
-                  导入 {selectedRows.size} 条线索
+                  导入 {selectedRows.size - duplicateCount} 条线索
                 </Button>
               </div>
             </>

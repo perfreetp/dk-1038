@@ -4,9 +4,38 @@ import { Card, CardBody, Badge, Button } from '../components/common';
 import { useLeads } from '../contexts/AppContext';
 import { BatchImport } from '../components/BatchImport';
 import { industryLabels, statusLabels, credibilityLabels, priorityLabels, websiteStatusLabels, users } from '../data/mockData';
-import { Calendar, User, Plus, Image as ImageIcon } from 'lucide-react';
+import { Calendar, Plus, Image as ImageIcon, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import type { Lead } from '../types';
+
+function getDisplayStatus(lead: Lead): { label: string; variant: string } {
+  if (lead.status === 'approved') {
+    if (lead.publish_type === 'now') {
+      return { label: '已发布', variant: 'published' };
+    } else if (lead.publish_type === 'scheduled') {
+      return { label: `待发布(${lead.scheduled_date ? format(new Date(lead.scheduled_date), 'MM/dd') : ''})`, variant: 'in_review' };
+    } else {
+      return { label: '待手动发布', variant: 'warning' };
+    }
+  }
+  
+  const variantMap: Record<string, string> = {
+    new: 'info',
+    pending_verification: 'pending',
+    in_progress: 'in_progress',
+    in_review: 'in_review',
+    returned: 'returned',
+    approved: 'approved',
+    published: 'published',
+    rejected: 'danger',
+  };
+  
+  return { 
+    label: statusLabels[lead.status] || lead.status, 
+    variant: variantMap[lead.status] || 'default' 
+  };
+}
 
 export function Leads() {
   const navigate = useNavigate();
@@ -15,7 +44,12 @@ export function Leads() {
 
   const filteredLeads = selectedStatus === 'all' 
     ? leads 
-    : leads.filter(l => l.status === selectedStatus);
+    : leads.filter(l => {
+        if (selectedStatus === 'published') {
+          return l.status === 'published' || (l.status === 'approved' && l.publish_type !== 'now');
+        }
+        return l.status === selectedStatus;
+      });
 
   const statusCounts = {
     all: leads.length,
@@ -23,21 +57,7 @@ export function Leads() {
     pending_verification: leads.filter(l => l.status === 'pending_verification').length,
     in_progress: leads.filter(l => l.status === 'in_progress').length,
     in_review: leads.filter(l => l.status === 'in_review').length,
-    published: leads.filter(l => l.status === 'published').length,
-  };
-
-  const getStatusVariant = (status: string) => {
-    const variants: Record<string, any> = {
-      new: 'info',
-      pending_verification: 'pending',
-      in_progress: 'in_progress',
-      in_review: 'in_review',
-      returned: 'returned',
-      approved: 'approved',
-      published: 'published',
-      rejected: 'danger',
-    };
-    return variants[status] || 'default';
+    published: leads.filter(l => l.status === 'published' || (l.status === 'approved')).length,
   };
 
   const getPriorityColor = (priority: string) => {
@@ -94,6 +114,8 @@ export function Leads() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredLeads.map((lead) => {
           const assignee = users.find(u => u.id === lead.assignee);
+          const displayStatus = getDisplayStatus(lead);
+          
           return (
             <React.Fragment key={lead.id}>
               <Card 
@@ -115,8 +137,8 @@ export function Leads() {
                       </div>
                     )}
                     <div className="absolute top-3 left-3 flex gap-2">
-                      <Badge variant={getStatusVariant(lead.status)}>
-                        {statusLabels[lead.status]}
+                      <Badge variant={displayStatus.variant as any}>
+                        {displayStatus.label}
                       </Badge>
                     </div>
                     <div className="absolute top-3 right-3">

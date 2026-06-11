@@ -69,6 +69,22 @@ export function LeadDetail() {
     return variants[status] || 'default';
   };
 
+  const getDisplayStatus = () => {
+    if (lead.status === 'approved') {
+      if (lead.publish_type === 'now') {
+        return { label: '已发布', variant: 'published' };
+      } else if (lead.publish_type === 'scheduled') {
+        return { label: `定时发布 (${lead.scheduled_date || ''})`, variant: 'in_review' };
+      } else {
+        return { label: '待手动发布', variant: 'warning' };
+      }
+    }
+    return { 
+      label: statusLabels[lead.status] || lead.status, 
+      variant: getStatusVariant(lead.status) 
+    };
+  };
+
   const handleSubmitReview = () => {
     if (confirm('确认提交审核？')) {
       submitForReview(lead.id);
@@ -103,8 +119,8 @@ export function LeadDetail() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-primary">{lead.project_name}</h1>
-              <Badge variant={getStatusVariant(lead.status)}>
-                {statusLabels[lead.status]}
+              <Badge variant={getDisplayStatus().variant as any}>
+                {getDisplayStatus().label}
               </Badge>
             </div>
             <p className="text-gray-500 mt-1">

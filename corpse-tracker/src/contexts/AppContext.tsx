@@ -244,15 +244,22 @@ function appReducer(state: AppState, action: AppAction): AppState {
         timestamp: now,
         description: `${userName} 批准"${lead?.project_name}"，设置为 ${publishDesc}`,
       };
+      
+      const updateData: Partial<Lead> = {
+        status: 'approved' as LeadStatus,
+        public_scope: action.payload.scope,
+        publish_type: action.payload.publish_type,
+        updated_at: now,
+      };
+      
+      if (action.payload.publish_type === 'scheduled' && action.payload.scheduled_date) {
+        updateData.scheduled_date = action.payload.scheduled_date;
+      }
+      
       return {
         ...state,
         leads: state.leads.map(l =>
-          l.id === action.payload.id ? { 
-            ...l, 
-            status: 'approved' as LeadStatus, 
-            public_scope: action.payload.scope,
-            updated_at: now 
-          } : l
+          l.id === action.payload.id ? { ...l, ...updateData } : l
         ),
         history: [historyRecord, ...state.history],
       };

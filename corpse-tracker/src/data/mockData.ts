@@ -4,7 +4,7 @@ import type { User, Lead, Task, Interview, Stats } from '../types';
 export const currentUser: User = {
   id: 'user-1',
   name: '张明',
-  role: 'editor',
+  role: 'reviewer',
   avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=ZhangMing',
 };
 

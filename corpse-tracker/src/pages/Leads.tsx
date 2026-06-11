@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardBody, Badge, Button } from '../components/common';
 import { useLeads } from '../contexts/AppContext';
+import { BatchImport } from '../components/BatchImport';
 import { industryLabels, statusLabels, credibilityLabels, priorityLabels, websiteStatusLabels, users } from '../data/mockData';
 import { Calendar, User, Plus, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
@@ -56,12 +57,15 @@ export function Leads() {
           <h1 className="text-2xl font-bold text-primary">线索收集</h1>
           <p className="text-gray-500 mt-1">录入和管理创业项目停运线索</p>
         </div>
-        <Link to="/leads/new">
-          <Button>
-            <Plus size={18} className="mr-2" />
-            新建线索
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          <BatchImport />
+          <Link to="/leads/new">
+            <Button>
+              <Plus size={18} className="mr-2" />
+              新建线索
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="flex gap-2 flex-wrap">

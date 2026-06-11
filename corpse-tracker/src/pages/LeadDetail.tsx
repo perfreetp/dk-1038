@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, CardHeader, CardBody, CardFooter, Badge, Button } from '../components/common';
 import { useLeads, useTasks, useInterviews } from '../contexts/AppContext';
+import { HistoryTimeline } from '../components/HistoryPanel';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -258,6 +259,15 @@ export function LeadDetail() {
               </CardBody>
             </Card>
           )}
+
+          <Card>
+            <CardHeader>
+              <h3 className="font-semibold">协作记录</h3>
+            </CardHeader>
+            <CardBody>
+              <HistoryTimeline leadId={lead.id} />
+            </CardBody>
+          </Card>
         </div>
 
         <div className="space-y-6">

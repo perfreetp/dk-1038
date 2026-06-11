@@ -69,6 +69,9 @@ export interface Lead {
   interviews?: string[];
   public_scope?: PublicScope;
   review_comments?: string;
+  required_fields?: string[];
+  publish_type?: 'now' | 'scheduled' | 'manual';
+  scheduled_date?: string;
 }
 
 export interface Task {

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Card, CardHeader, CardBody, Button, Modal } from '../components/common';
 import { useLeads } from '../contexts/AppContext';
-import { Upload, FileText, AlertTriangle, Download, X } from 'lucide-react';
+import { Upload, FileText, AlertTriangle, Download, X, CheckCircle, Info } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface ParsedLead {
   project_name: string;
@@ -12,6 +13,8 @@ interface ParsedLead {
   funding_round?: string;
   funding_amount?: string;
   isDuplicate: boolean;
+  missingFields: string[];
+  rowNumber: number;
 }
 
 function parseCSVLine(line: string): string[] {
@@ -53,17 +56,34 @@ export function BatchImport() {
   const [importMode, setImportMode] = React.useState<'paste' | 'file'>('paste');
   const [pasteContent, setPasteContent] = React.useState('');
   const [headers, setHeaders] = React.useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = React.useState('');
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      parseAndPreview(content, file.name);
-    };
-    reader.readAsText(file);
+    const fileName = file.name.toLowerCase();
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const data = event.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+        parseAndPreviewFromArray(jsonData, file.name);
+      };
+      reader.readAsBinaryString(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        parseAndPreview(content, file.name);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handlePaste = () => {
@@ -72,29 +92,36 @@ export function BatchImport() {
     }
   };
 
-  const parseAndPreview = (content: string, filename: string) => {
-    const rows = parseCSV(content);
+  const parseAndPreviewFromArray = (rows: string[][], filename: string) => {
     if (rows.length < 2) {
-      alert('数据格式不正确，至少需要表头和一行数据');
+      setErrorMsg('数据格式不正确，至少需要表头和一行数据');
       return;
     }
 
+    setErrorMsg('');
     setHeaders(rows[0]);
     const existingNames = new Set(leads.map(l => l.project_name.toLowerCase()));
     const parsed: ParsedLead[] = [];
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      if (row.length < 4 || !row[0].trim()) continue;
+      if (!row || row.length < 1 || !row[0] || !row[0].toString().trim()) continue;
 
-      const name = row[0].trim();
-      const statusRaw = (row[1] || '').toLowerCase();
-      const industryRaw = row[2] || '';
-      const evidence = row[3] || '';
-      const priorityRaw = (row[4] || '').toLowerCase();
-      const fundingRaw = row[5] || '';
+      const name = row[0].toString().trim();
+      const statusRaw = (row[1] || '').toString().toLowerCase();
+      const industryRaw = (row[2] || '').toString();
+      const evidence = (row[3] || '').toString();
+      const priorityRaw = (row[4] || '').toString().toLowerCase();
+      const fundingRaw = (row[5] || '').toString();
 
-      const isShutdown = statusRaw.includes('关闭') || statusRaw.includes('shutdown') || statusRaw.includes('关闭') || statusRaw.includes('已关闭');
+      const missingFields: string[] = [];
+      if (!name) missingFields.push('项目名称');
+      if (!statusRaw) missingFields.push('官网状态');
+      if (!industryRaw) missingFields.push('行业');
+      if (!evidence) missingFields.push('停运证据');
+      if (!priorityRaw) missingFields.push('优先级');
+
+      const isShutdown = statusRaw.includes('关闭') || statusRaw.includes('shutdown') || statusRaw.includes('已关闭');
       const isRedirect = statusRaw.includes('跳转') || statusRaw.includes('redirect') || statusRaw.includes('重定向');
       
       let fundingRound = '', fundingAmount = '';
@@ -113,12 +140,19 @@ export function BatchImport() {
         funding_round: fundingRound || undefined,
         funding_amount: fundingAmount || undefined,
         isDuplicate: existingNames.has(name.toLowerCase()),
+        missingFields,
+        rowNumber: i + 1,
       });
     }
 
     setParsedData(parsed);
     setSelectedRows(new Set(parsed.map((_, idx) => idx)));
     setImportMode(filename.endsWith('.csv') || filename === 'pasted' ? 'paste' : 'file');
+  };
+
+  const parseAndPreview = (content: string, filename: string) => {
+    const rows = parseCSV(content);
+    parseAndPreviewFromArray(rows, filename);
   };
 
   const mapIndustry = (value: string): string => {
@@ -169,7 +203,7 @@ export function BatchImport() {
 
   const handleImport = () => {
     const toImport = parsedData
-      .filter((_, i) => selectedRows.has(i) && !_.isDuplicate)
+      .filter((_, i) => selectedRows.has(i) && !_.isDuplicate && _.missingFields.length === 0)
       .map(item => ({
         project_name: item.project_name,
         website_status: item.website_status as any,
@@ -182,7 +216,7 @@ export function BatchImport() {
         industry: item.industry as any,
         credibility: 'medium' as any,
         priority: item.priority,
-        status: 'new' as any,
+        status: 'pending_verification' as any,
         created_by: 'current-user',
       }));
 
@@ -193,6 +227,7 @@ export function BatchImport() {
       setSelectedRows(new Set());
       setPasteContent('');
       setHeaders([]);
+      setErrorMsg('');
     }
   };
 
@@ -212,6 +247,12 @@ export function BatchImport() {
   };
 
   const duplicateCount = parsedData.filter(d => d.isDuplicate).length;
+  const missingCount = parsedData.filter(d => d.missingFields.length > 0).length;
+  const validCount = parsedData.filter(d => 
+    selectedRows.has(parsedData.indexOf(d)) && 
+    !d.isDuplicate && 
+    d.missingFields.length === 0
+  ).length;
 
   return (
     <>
@@ -259,15 +300,22 @@ export function BatchImport() {
             <div>
               <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-accent hover:bg-gray-50 transition-colors">
                 <Upload size={32} className="text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500">点击上传 CSV 文件</p>
-                <p className="text-xs text-gray-400 mt-1">支持 CSV 格式（Excel 另存为 CSV）</p>
+                <p className="text-sm text-gray-500">点击上传 CSV 或 Excel 文件</p>
+                <p className="text-xs text-gray-400 mt-1">支持 .csv 和 .xlsx 格式（Excel 表格）</p>
                 <input
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
               </label>
+            </div>
+          )}
+
+          {errorMsg && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+              <AlertTriangle size={16} />
+              <span className="text-sm">{errorMsg}</span>
             </div>
           )}
 
@@ -283,12 +331,21 @@ export function BatchImport() {
                   </button>
                   <span className="text-sm text-gray-500">
                     已选择 {selectedRows.size} 项
+                  </span>
+                  <div className="flex items-center gap-3 text-xs">
                     {duplicateCount > 0 && (
-                      <span className="text-orange-500 ml-2">
-                        ({duplicateCount} 项重复将跳过)
+                      <span className="text-orange-500 flex items-center gap-1">
+                        <AlertTriangle size={12} />
+                        {duplicateCount} 项重复
                       </span>
                     )}
-                  </span>
+                    {missingCount > 0 && (
+                      <span className="text-blue-500 flex items-center gap-1">
+                        <Info size={12} />
+                        {missingCount} 项缺失字段
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button onClick={downloadTemplate} className="text-sm text-accent hover:underline">
                   <Download size={14} className="inline mr-1" />
@@ -296,15 +353,17 @@ export function BatchImport() {
                 </button>
               </div>
 
-              <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg">
+              <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
                       <th className="p-2 text-left w-8"></th>
+                      <th className="p-2 text-left">行号</th>
                       <th className="p-2 text-left">项目名称</th>
                       <th className="p-2 text-left">状态</th>
                       <th className="p-2 text-left">行业</th>
                       <th className="p-2 text-left">优先级</th>
+                      <th className="p-2 text-left">问题</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -312,12 +371,16 @@ export function BatchImport() {
                       <tr
                         key={index}
                         className={`border-t border-gray-100 ${
-                          item.isDuplicate ? 'bg-orange-50' : selectedRows.has(index) ? 'bg-accent/5' : ''
+                          item.isDuplicate ? 'bg-orange-50' : 
+                          item.missingFields.length > 0 ? 'bg-blue-50' :
+                          selectedRows.has(index) ? 'bg-accent/5' : ''
                         }`}
                       >
                         <td className="p-2">
                           {item.isDuplicate ? (
                             <AlertTriangle size={16} className="text-orange-500" />
+                          ) : item.missingFields.length > 0 ? (
+                            <Info size={16} className="text-blue-500" />
                           ) : (
                             <input
                               type="checkbox"
@@ -327,6 +390,7 @@ export function BatchImport() {
                             />
                           )}
                         </td>
+                        <td className="p-2 text-gray-400 text-xs">{item.rowNumber}</td>
                         <td className="p-2 font-medium">
                           {item.project_name}
                           {item.isDuplicate && (
@@ -365,18 +429,40 @@ export function BatchImport() {
                              item.priority === 'medium' ? '中' : '低'}
                           </span>
                         </td>
+                        <td className="p-2">
+                          {item.isDuplicate && (
+                            <span className="text-xs text-orange-600">重复项目</span>
+                          )}
+                          {item.missingFields.length > 0 && (
+                            <span className="text-xs text-blue-600" title={item.missingFields.join(', ')}>
+                              缺失: {item.missingFields.join(', ')}
+                            </span>
+                          )}
+                          {!item.isDuplicate && item.missingFields.length === 0 && (
+                            <CheckCircle size={16} className="text-green-500" />
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
 
+              <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
+                <p>• 重复项目（橙色）将被自动跳过</p>
+                <p>• 缺失必填字段的项目（蓝色）将无法导入</p>
+                <p>• 导入的线索将进入「待核实」列表</p>
+              </div>
+
               <div className="flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setIsOpen(false)}>
                   取消
                 </Button>
-                <Button onClick={handleImport} disabled={selectedRows.size === 0}>
-                  导入 {selectedRows.size - duplicateCount} 条线索
+                <Button 
+                  onClick={handleImport} 
+                  disabled={validCount === 0}
+                >
+                  导入 {validCount} 条有效线索
                 </Button>
               </div>
             </>

@@ -46,7 +46,13 @@ export function Leads() {
     ? leads 
     : leads.filter(l => {
         if (selectedStatus === 'published') {
-          return l.status === 'published' || (l.status === 'approved' && l.publish_type !== 'now');
+          return l.status === 'published' || (l.status === 'approved' && l.publish_type === 'now');
+        }
+        if (selectedStatus === 'scheduled') {
+          return l.status === 'approved' && l.publish_type === 'scheduled';
+        }
+        if (selectedStatus === 'manual') {
+          return l.status === 'approved' && l.publish_type === 'manual';
         }
         return l.status === selectedStatus;
       });
@@ -57,7 +63,16 @@ export function Leads() {
     pending_verification: leads.filter(l => l.status === 'pending_verification').length,
     in_progress: leads.filter(l => l.status === 'in_progress').length,
     in_review: leads.filter(l => l.status === 'in_review').length,
-    published: leads.filter(l => l.status === 'published' || (l.status === 'approved')).length,
+    published: leads.filter(l => 
+      l.status === 'published' || 
+      (l.status === 'approved' && l.publish_type === 'now')
+    ).length,
+    scheduled: leads.filter(l => 
+      l.status === 'approved' && l.publish_type === 'scheduled'
+    ).length,
+    manual: leads.filter(l => 
+      l.status === 'approved' && l.publish_type === 'manual'
+    ).length,
   };
 
   const getPriorityColor = (priority: string) => {
@@ -96,6 +111,8 @@ export function Leads() {
           { key: 'in_progress', label: `编辑中 (${statusCounts.in_progress})` },
           { key: 'in_review', label: `待审核 (${statusCounts.in_review})` },
           { key: 'published', label: `已发布 (${statusCounts.published})` },
+          { key: 'scheduled', label: `待发布 (${statusCounts.scheduled})` },
+          { key: 'manual', label: `待手动 (${statusCounts.manual})` },
         ].map(tab => (
           <button
             key={tab.key}

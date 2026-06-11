@@ -10,6 +10,7 @@ import {
   Pending,
   Workbench,
   Reviews,
+  PublishManagement,
 } from './pages';
 import './style.css';
 
@@ -26,6 +27,7 @@ function App() {
             <Route path="/pending" element={<Pending />} />
             <Route path="/workbench" element={<Workbench />} />
             <Route path="/reviews" element={<Reviews />} />
+            <Route path="/publish" element={<PublishManagement />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

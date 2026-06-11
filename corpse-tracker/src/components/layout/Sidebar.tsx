@@ -8,6 +8,7 @@ import {
   Briefcase,
   ClipboardCheck,
   User,
+  Send,
 } from 'lucide-react';
 
 const navItems = [
@@ -16,6 +17,7 @@ const navItems = [
   { path: '/pending', icon: ListChecks, label: '待核实' },
   { path: '/workbench', icon: Briefcase, label: '编辑工作台', roles: ['editor', 'reviewer'] },
   { path: '/reviews', icon: ClipboardCheck, label: '发布审核', roles: ['reviewer'] },
+  { path: '/publish', icon: Send, label: '发布管理', roles: ['reviewer'] },
 ];
 
 export function Sidebar() {

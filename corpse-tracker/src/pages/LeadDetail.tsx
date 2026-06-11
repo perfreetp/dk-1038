@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, CardHeader, CardBody, CardFooter, Badge, Button } from '../components/common';
 import { useLeads, useTasks, useInterviews } from '../contexts/AppContext';
 import { HistoryTimeline } from '../components/HistoryPanel';
+import { ReviewTimeline } from '../components/ReviewTimeline';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -272,6 +273,17 @@ export function LeadDetail() {
                 <div className="p-4 bg-yellow-50 rounded-lg">
                   <p className="text-gray-700">{lead.review_comments}</p>
                 </div>
+              </CardBody>
+            </Card>
+          )}
+
+          {['in_review', 'approved', 'published'].includes(lead.status) && (
+            <Card>
+              <CardHeader>
+                <h3 className="font-semibold">审核与发布时间线</h3>
+              </CardHeader>
+              <CardBody>
+                <ReviewTimeline leadId={lead.id} />
               </CardBody>
             </Card>
           )}

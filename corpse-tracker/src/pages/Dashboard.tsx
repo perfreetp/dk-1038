@@ -38,6 +38,18 @@ const timeRanges = [
   { value: 'all', label: '全部' },
 ];
 
+const publishStatusLabels: Record<string, string> = {
+  'new': '新线索',
+  'pending_verification': '待核实',
+  'in_progress': '编辑中',
+  'in_review': '待审核',
+  'returned': '已退回',
+  'published': '已发布',
+  'scheduled': '待发布',
+  'manual': '待手动',
+  'rejected': '已拒绝',
+};
+
 export function Dashboard() {
   const { state } = useApp();
   const { leads, tasks } = state;
@@ -79,15 +91,37 @@ export function Dashboard() {
     l.status === 'pending_verification' || l.status === 'new'
   ).length;
 
-  const approved = filteredLeads.filter(l => l.status === 'approved' || l.status === 'published').length;
+  const published = filteredLeads.filter(l => 
+    l.status === 'published' || (l.status === 'approved' && l.publish_type === 'now')
+  ).length;
+  
+  const approved = filteredLeads.filter(l => 
+    l.status === 'approved' || l.status === 'published'
+  ).length;
+  
   const totalReviewed = filteredLeads.filter(l => 
     ['approved', 'published', 'rejected'].includes(l.status)
   ).length;
+  
   const approvalRate = totalReviewed > 0 ? Math.round((approved / totalReviewed) * 100) : 0;
 
+  const inReview = filteredLeads.filter(l => l.status === 'in_review').length;
+  const inProgress = filteredLeads.filter(l => l.status === 'in_progress').length;
+  const returned = filteredLeads.filter(l => l.status === 'returned').length;
+
   const leadsByStatus = Object.entries(
-    filteredLeads.reduce((acc, lead) => {
-      acc[lead.status] = (acc[lead.status] || 0) + 1;
+    filteredLeads.reduce<Record<string, number>>((acc, lead) => {
+      let status = lead.status;
+      if (lead.status === 'approved') {
+        if (lead.publish_type === 'now') {
+          status = 'published';
+        } else if (lead.publish_type === 'scheduled') {
+          status = 'scheduled';
+        } else {
+          status = 'manual';
+        }
+      }
+      acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>)
   );
@@ -146,9 +180,13 @@ export function Dashboard() {
         weeklyNew,
         pendingVerification,
         approvalRate,
+        published,
+        inReview,
+        inProgress,
+        returned,
       },
       byStatus: leadsByStatus.map(([status, count]) => ({
-        status: statusLabels[status] || status,
+        status: publishStatusLabels[status] || statusLabels[status] || status,
         count,
       })),
       byIndustry: leadsByIndustry,
@@ -449,7 +487,7 @@ export function Dashboard() {
                       style={{ backgroundColor: COLORS[index % COLORS.length] }}
                     />
                     <span className="text-sm text-gray-600">
-                      {statusLabels[status] || status}
+                      {publishStatusLabels[status] || statusLabels[status] || status}
                     </span>
                     <span className="text-sm font-medium ml-auto">{count}</span>
                   </div>

@@ -5,3 +5,4 @@ export { LeadDetail } from './LeadDetail';
 export { Pending } from './Pending';
 export { Workbench } from './Workbench';
 export { Reviews } from './Reviews';
+export { PublishManagement } from './PublishManagement';

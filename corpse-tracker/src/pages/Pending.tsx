@@ -9,7 +9,7 @@ import {
   priorityLabels,
   users 
 } from '../data/mockData';
-import { Search, Filter, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Search, Filter, CheckCircle, XCircle, Clock, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
@@ -48,7 +48,7 @@ export function Pending() {
   const handleAssign = (leadId: string, userId: string) => {
     const lead = leads.find(l => l.id === leadId);
     if (lead) {
-      updateLead({ ...lead, assignee: userId });
+      updateLead({ ...lead, assignee: userId || undefined });
     }
   };
 
@@ -141,74 +141,86 @@ export function Pending() {
           return (
             <React.Fragment key={lead.id}>
               <Card hover onClick={() => navigate(`/leads/${lead.id}`)}>
-              <CardBody className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-bold text-lg text-primary">{lead.project_name}</h3>
-                      <Badge className={getPriorityColor(lead.priority)}>
-                        {priorityLabels[lead.priority]}
-                      </Badge>
-                      <Badge variant={lead.credibility === 'high' ? 'success' : lead.credibility === 'medium' ? 'warning' : 'danger'}>
-                        可信度: {credibilityLabels[lead.credibility]}
-                      </Badge>
-                    </div>
+                <CardBody className="p-6">
+                  <div className="flex items-start gap-6">
+                    {lead.screenshots[0] ? (
+                      <img
+                        src={lead.screenshots[0]}
+                        alt={lead.project_name}
+                        className="w-32 h-24 object-cover rounded-lg border border-gray-200 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-32 h-24 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center flex-shrink-0">
+                        <ImageIcon size={32} className="text-gray-300" />
+                      </div>
+                    )}
                     
-                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                      {lead.shutdown_evidence}
-                    </p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="font-bold text-lg text-primary">{lead.project_name}</h3>
+                        <Badge className={getPriorityColor(lead.priority)}>
+                          {priorityLabels[lead.priority]}
+                        </Badge>
+                        <Badge variant={lead.credibility === 'high' ? 'success' : lead.credibility === 'medium' ? 'warning' : 'danger'}>
+                          可信度: {credibilityLabels[lead.credibility]}
+                        </Badge>
+                      </div>
+                      
+                      <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                        {lead.shutdown_evidence}
+                      </p>
 
-                    <div className="flex items-center gap-6 text-sm text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <span>行业:</span>
-                        <span className="font-medium text-gray-700">{industryLabels[lead.industry]}</span>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock size={14} />
-                        {format(new Date(lead.created_at), 'MM/dd HH:mm', { locale: zhCN })}
-                      </span>
-                      {assignee ? (
-                        <span className="flex items-center gap-2">
-                          <img src={assignee.avatar} alt={assignee.name} className="w-5 h-5 rounded-full" />
-                          {assignee.name}
+                      <div className="flex items-center gap-6 text-sm text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <span>行业:</span>
+                          <span className="font-medium text-gray-700">{industryLabels[lead.industry]}</span>
                         </span>
-                      ) : (
-                        <span className="text-accent">待分配</span>
-                      )}
+                        <span className="flex items-center gap-1">
+                          <Clock size={14} />
+                          {format(new Date(lead.created_at), 'MM/dd HH:mm', { locale: zhCN })}
+                        </span>
+                        {assignee ? (
+                          <span className="flex items-center gap-2">
+                            <img src={assignee.avatar} alt={assignee.name} className="w-5 h-5 rounded-full" />
+                            {assignee.name}
+                          </span>
+                        ) : (
+                          <span className="text-accent">待分配</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={lead.assignee || ''}
+                        onChange={(e) => handleAssign(lead.id, e.target.value)}
+                        className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                      >
+                        <option value="">分配给</option>
+                        {users.filter(u => u.role === 'editor').map(user => (
+                          <option key={user.id} value={user.id}>{user.name}</option>
+                        ))}
+                      </select>
+                      <Button 
+                        size="sm" 
+                        variant="success"
+                        onClick={() => handleVerify(lead.id)}
+                      >
+                        <CheckCircle size={14} className="mr-1" />
+                        核实通过
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="danger"
+                        onClick={() => handleReject(lead.id)}
+                      >
+                        <XCircle size={14} className="mr-1" />
+                        拒绝
+                      </Button>
                     </div>
                   </div>
-
-                  <div className="flex flex-col gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
-                    <select
-                      value={lead.assignee || ''}
-                      onChange={(e) => handleAssign(lead.id, e.target.value)}
-                      className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                    >
-                      <option value="">分配给</option>
-                      {users.filter(u => u.role === 'editor').map(user => (
-                        <option key={user.id} value={user.id}>{user.name}</option>
-                      ))}
-                    </select>
-                    <Button 
-                      size="sm" 
-                      variant="success"
-                      onClick={() => handleVerify(lead.id)}
-                    >
-                      <CheckCircle size={14} className="mr-1" />
-                      核实通过
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="danger"
-                      onClick={() => handleReject(lead.id)}
-                    >
-                      <XCircle size={14} className="mr-1" />
-                      拒绝
-                    </Button>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
+                </CardBody>
+              </Card>
             </React.Fragment>
           );
         })}

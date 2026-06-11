@@ -1,23 +1,33 @@
 import React from 'react';
 import { Card, CardHeader, CardBody, Badge, Button, Input, Textarea, Select, Modal } from '../components/common';
 import { useLeads, useTasks, useInterviews, useApp } from '../contexts/AppContext';
-import { users, industryLabels, statusLabels } from '../data/mockData';
+import { users, industryLabels } from '../data/mockData';
 import { 
   Plus, 
   CheckCircle, 
   Clock, 
-  Circle, 
+  Circle,
   Trash2,
-  MessageSquare,
   AlertTriangle,
   Send,
   User,
   Calendar,
+  X,
+  Save,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { v4 as uuidv4 } from 'uuid';
-import type { Task, Interview, TaskStatus } from '../types';
+import type { Task, TaskStatus, FailureNode } from '../types';
+
+const failureTypes = [
+  { value: 'funding', label: '资金链断裂' },
+  { value: 'market_mismatch', label: '市场失配' },
+  { value: 'team_issue', label: '团队问题' },
+  { value: 'policy', label: '政策因素' },
+  { value: 'competition', label: '竞争失利' },
+  { value: 'other', label: '其他' },
+];
 
 export function Workbench() {
   const { leads, updateLead } = useLeads();
@@ -28,15 +38,20 @@ export function Workbench() {
   const [selectedLeadId, setSelectedLeadId] = React.useState<string | null>(null);
   const [showTaskModal, setShowTaskModal] = React.useState(false);
   const [showInterviewModal, setShowInterviewModal] = React.useState(false);
+  const [showFailureModal, setShowFailureModal] = React.useState(false);
+  const [showDisputeModal, setShowDisputeModal] = React.useState(false);
+  const [showSimilarModal, setShowSimilarModal] = React.useState(false);
+  const [showStatusModal, setShowStatusModal] = React.useState(false);
+  const [selectedTaskId, setSelectedTaskId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<'tasks' | 'interviews' | 'analysis'>('tasks');
 
   const myTasks = tasks.filter(t => t.assignee === state.currentUser.id);
-  const inProgressLeads = state.leads.filter(l => 
+  const inProgressLeads = leads.filter(l => 
     l.status === 'in_progress' || l.status === 'returned'
   );
 
   const selectedLead = selectedLeadId 
-    ? state.leads.find(l => l.id === selectedLeadId) 
+    ? leads.find(l => l.id === selectedLeadId) 
     : inProgressLeads[0];
 
   const leadTasks = selectedLead 
@@ -60,6 +75,15 @@ export function Workbench() {
     content: '',
     key_findings: '',
   });
+
+  const [newFailure, setNewFailure] = React.useState({
+    type: 'funding',
+    description: '',
+    date: '',
+  });
+
+  const [newDispute, setNewDispute] = React.useState('');
+  const [newSimilar, setNewSimilar] = React.useState('');
 
   const handleAddTask = () => {
     if (selectedLead && newTask.title) {
@@ -90,9 +114,91 @@ export function Workbench() {
     }
   };
 
+  const handleAddFailure = () => {
+    if (selectedLead && newFailure.description) {
+      const failureNode: FailureNode = {
+        id: uuidv4(),
+        type: newFailure.type as any,
+        description: newFailure.description,
+        date: newFailure.date || undefined,
+      };
+      updateLead({
+        ...selectedLead,
+        failure_nodes: [...(selectedLead.failure_nodes || []), failureNode],
+      });
+      setNewFailure({ type: 'funding', description: '', date: '' });
+      setShowFailureModal(false);
+    }
+  };
+
+  const handleAddDispute = () => {
+    if (selectedLead && newDispute.trim()) {
+      updateLead({
+        ...selectedLead,
+        disputes: [...(selectedLead.disputes || []), newDispute.trim()],
+      });
+      setNewDispute('');
+      setShowDisputeModal(false);
+    }
+  };
+
+  const handleAddSimilar = () => {
+    if (selectedLead && newSimilar.trim()) {
+      updateLead({
+        ...selectedLead,
+        similar_projects: [...(selectedLead.similar_projects || []), newSimilar.trim()],
+      });
+      setNewSimilar('');
+      setShowSimilarModal(false);
+    }
+  };
+
+  const handleDeleteFailure = (failureId: string) => {
+    if (selectedLead) {
+      updateLead({
+        ...selectedLead,
+        failure_nodes: (selectedLead.failure_nodes || []).filter(n => n.id !== failureId),
+      });
+    }
+  };
+
+  const handleDeleteDispute = (index: number) => {
+    if (selectedLead) {
+      updateLead({
+        ...selectedLead,
+        disputes: (selectedLead.disputes || []).filter((_, i) => i !== index),
+      });
+    }
+  };
+
+  const handleDeleteSimilar = (index: number) => {
+    if (selectedLead) {
+      updateLead({
+        ...selectedLead,
+        similar_projects: (selectedLead.similar_projects || []).filter((_, i) => i !== index),
+      });
+    }
+  };
+
+  const openStatusModal = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setShowStatusModal(true);
+  };
+
+  const handleChangeTaskStatus = (newStatus: TaskStatus) => {
+    const task = tasks.find(t => t.id === selectedTaskId);
+    if (task) {
+      updateTask({ ...task, status: newStatus });
+    }
+    setShowStatusModal(false);
+    setSelectedTaskId(null);
+  };
+
   const toggleTaskStatus = (task: Task) => {
-    const newStatus: TaskStatus = task.status === 'done' ? 'todo' : 'done';
-    updateTask({ ...task, status: newStatus });
+    const statusOrder: TaskStatus[] = ['todo', 'in_progress', 'done'];
+    const currentIndex = statusOrder.indexOf(task.status);
+    const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length];
+    updateTask({ ...task, status: nextStatus });
   };
 
   const getStatusIcon = (status: TaskStatus) => {
@@ -103,6 +209,17 @@ export function Workbench() {
         return <Clock size={18} className="text-yellow-500" />;
       default:
         return <Circle size={18} className="text-gray-400" />;
+    }
+  };
+
+  const getStatusLabel = (status: TaskStatus) => {
+    switch (status) {
+      case 'done':
+        return '已完成';
+      case 'in_progress':
+        return '进行中';
+      default:
+        return '待办';
     }
   };
 
@@ -172,8 +289,8 @@ export function Workbench() {
             <CardBody className="p-0">
               <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
                 {myTasks.length > 0 ? (
-                  myTasks.slice(0, 10).map(task => {
-                    const lead = state.leads.find(l => l.id === task.lead_id);
+                  myTasks.map(task => {
+                    const lead = leads.find(l => l.id === task.lead_id);
                     return (
                       <div key={task.id} className="p-4 hover:bg-gray-50">
                         <div className="flex items-start gap-3">
@@ -285,9 +402,7 @@ export function Workbench() {
                         return (
                           <div key={status}>
                             <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center gap-2">
-                              {status === 'todo' && '待办'}
-                              {status === 'in_progress' && '进行中'}
-                              {status === 'done' && '已完成'}
+                              {getStatusLabel(status as TaskStatus)}
                               <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">
                                 {statusTasks.length}
                               </span>
@@ -304,7 +419,8 @@ export function Workbench() {
                                       {getStatusIcon(task.status)}
                                     </button>
                                     <div className="flex-1 min-w-0">
-                                      <p className={`text-sm ${task.status === 'done' ? 'line-through text-gray-400' : ''}`}>
+                                      <p className={`text-sm cursor-pointer hover:text-accent ${task.status === 'done' ? 'line-through text-gray-400' : ''}`}
+                                         onClick={() => openStatusModal(task.id)}>
                                         {task.title}
                                       </p>
                                       {task.description && (
@@ -383,46 +499,95 @@ export function Workbench() {
                   )}
 
                   {activeTab === 'analysis' && (
-                    <div className="space-y-4">
-                      <h4 className="font-medium">失败节点</h4>
-                      {selectedLead.failure_nodes && selectedLead.failure_nodes.length > 0 ? (
-                        <div className="space-y-3">
-                          {selectedLead.failure_nodes.map(node => (
-                            <div key={node.id} className="p-4 bg-gray-50 rounded-lg">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Badge variant="default">
-                                  {node.type === 'funding' && '资金链断裂'}
-                                  {node.type === 'market_mismatch' && '市场失配'}
-                                  {node.type === 'team_issue' && '团队问题'}
-                                  {node.type === 'policy' && '政策因素'}
-                                  {node.type === 'competition' && '竞争失利'}
-                                  {node.type === 'other' && '其他'}
-                                </Badge>
-                                {node.date && (
-                                  <span className="text-sm text-gray-500">{node.date}</span>
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-600">{node.description}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-400 italic">暂无失败节点分析</p>
-                      )}
+                    <div className="space-y-6">
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setShowFailureModal(true)}>
+                          <Plus size={16} className="mr-1" />
+                          添加失败节点
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setShowDisputeModal(true)}>
+                          <Plus size={16} className="mr-1" />
+                          添加争议点
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setShowSimilarModal(true)}>
+                          <Plus size={16} className="mr-1" />
+                          添加相似项目
+                        </Button>
+                      </div>
 
-                      <h4 className="font-medium mt-6">争议点</h4>
-                      {selectedLead.disputes && selectedLead.disputes.length > 0 ? (
-                        <ul className="space-y-2">
-                          {selectedLead.disputes.map((dispute, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-gray-700">
-                              <span className="text-accent">•</span>
-                              {dispute}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-sm text-gray-400 italic">暂无争议点记录</p>
-                      )}
+                      <div>
+                        <h4 className="font-medium mb-3">失败节点</h4>
+                        {selectedLead.failure_nodes && selectedLead.failure_nodes.length > 0 ? (
+                          <div className="space-y-3">
+                            {selectedLead.failure_nodes.map(node => (
+                              <div key={node.id} className="p-4 bg-gray-50 rounded-lg flex items-start gap-3">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Badge variant="default">
+                                      {failureTypes.find(t => t.value === node.type)?.label || '其他'}
+                                    </Badge>
+                                    {node.date && (
+                                      <span className="text-sm text-gray-500">{node.date}</span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-gray-600">{node.description}</p>
+                                </div>
+                                <button
+                                  onClick={() => handleDeleteFailure(node.id)}
+                                  className="p-1 text-gray-400 hover:text-red-500"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-400 italic">暂无失败节点分析</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium mb-3">争议点</h4>
+                        {selectedLead.disputes && selectedLead.disputes.length > 0 ? (
+                          <div className="space-y-2">
+                            {selectedLead.disputes.map((dispute, idx) => (
+                              <div key={idx} className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg">
+                                <span className="text-accent flex-shrink-0">•</span>
+                                <p className="text-sm text-gray-700 flex-1">{dispute}</p>
+                                <button
+                                  onClick={() => handleDeleteDispute(idx)}
+                                  className="p-1 text-gray-400 hover:text-red-500"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-400 italic">暂无争议点记录</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <h4 className="font-medium mb-3">相似项目</h4>
+                        {selectedLead.similar_projects && selectedLead.similar_projects.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedLead.similar_projects.map((project, idx) => (
+                              <div key={idx} className="flex items-center gap-2 px-3 py-1 bg-gray-50 rounded-full">
+                                <Badge variant="default">{project}</Badge>
+                                <button
+                                  onClick={() => handleDeleteSimilar(idx)}
+                                  className="text-gray-400 hover:text-red-500"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-400 italic">暂无相似项目</p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -521,6 +686,85 @@ export function Workbench() {
             <Button variant="outline" onClick={() => setShowInterviewModal(false)}>取消</Button>
             <Button onClick={handleAddInterview}>添加</Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showFailureModal} onClose={() => setShowFailureModal(false)} title="添加失败节点">
+        <div className="space-y-4">
+          <Select
+            label="失败类型"
+            value={newFailure.type}
+            onChange={(v) => setNewFailure({ ...newFailure, type: v })}
+            options={failureTypes}
+          />
+          <Input
+            label="发生时间"
+            type="date"
+            value={newFailure.date}
+            onChange={(e) => setNewFailure({ ...newFailure, date: e.target.value })}
+          />
+          <Textarea
+            label="详细描述"
+            value={newFailure.description}
+            onChange={(e) => setNewFailure({ ...newFailure, description: e.target.value })}
+            placeholder="请描述失败的具体情况"
+            rows={4}
+          />
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setShowFailureModal(false)}>取消</Button>
+            <Button onClick={handleAddFailure}>添加</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showDisputeModal} onClose={() => setShowDisputeModal(false)} title="添加争议点">
+        <div className="space-y-4">
+          <Textarea
+            label="争议内容"
+            value={newDispute}
+            onChange={(e) => setNewDispute(e.target.value)}
+            placeholder="请描述存疑的信息"
+            rows={4}
+          />
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setShowDisputeModal(false)}>取消</Button>
+            <Button onClick={handleAddDispute}>添加</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showSimilarModal} onClose={() => setShowSimilarModal(false)} title="添加相似项目">
+        <div className="space-y-4">
+          <Input
+            label="项目名称"
+            value={newSimilar}
+            onChange={(e) => setNewSimilar(e.target.value)}
+            placeholder="请输入相似项目名称"
+          />
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setShowSimilarModal(false)}>取消</Button>
+            <Button onClick={handleAddSimilar}>添加</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showStatusModal} onClose={() => setShowStatusModal(false)} title="更改任务状态">
+        <div className="space-y-2">
+          {(['todo', 'in_progress', 'done'] as TaskStatus[]).map(status => {
+            const task = tasks.find(t => t.id === selectedTaskId);
+            return (
+              <button
+                key={status}
+                onClick={() => handleChangeTaskStatus(status)}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                  task?.status === status ? 'bg-accent/10 border-2 border-accent' : 'hover:bg-gray-50 border-2 border-transparent'
+                }`}
+              >
+                {getStatusIcon(status)}
+                <span>{getStatusLabel(status)}</span>
+              </button>
+            );
+          })}
         </div>
       </Modal>
     </div>

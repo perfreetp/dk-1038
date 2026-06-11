@@ -1,12 +1,11 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardBody, Badge, Button } from '../components/common';
 import { useLeads } from '../contexts/AppContext';
 import { industryLabels, statusLabels, credibilityLabels, priorityLabels, websiteStatusLabels, users } from '../data/mockData';
-import { Calendar, User, ExternalLink, Plus } from 'lucide-react';
+import { Calendar, User, Plus, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
-import { Link } from 'react-router-dom';
 
 export function Leads() {
   const navigate = useNavigate();
@@ -98,78 +97,78 @@ export function Leads() {
                 onClick={() => navigate(`/leads/${lead.id}`)}
                 className="group"
               >
-              <CardBody className="p-0">
-                <div className="relative">
-                  {lead.screenshots[0] ? (
-                    <img
-                      src={lead.screenshots[0]}
-                      alt={lead.project_name}
-                      className="w-full h-40 object-cover rounded-t-xl"
-                    />
-                  ) : (
-                    <div className="w-full h-40 bg-gray-100 rounded-t-xl flex items-center justify-center">
-                      <span className="text-gray-400">暂无截图</span>
+                <CardBody className="p-0">
+                  <div className="relative">
+                    {lead.screenshots[0] ? (
+                      <img
+                        src={lead.screenshots[0]}
+                        alt={lead.project_name}
+                        className="w-full h-40 object-cover rounded-t-xl"
+                      />
+                    ) : (
+                      <div className="w-full h-40 bg-gray-100 rounded-t-xl flex items-center justify-center">
+                        <ImageIcon size={48} className="text-gray-300" />
+                      </div>
+                    )}
+                    <div className="absolute top-3 left-3 flex gap-2">
+                      <Badge variant={getStatusVariant(lead.status)}>
+                        {statusLabels[lead.status]}
+                      </Badge>
                     </div>
-                  )}
-                  <div className="absolute top-3 left-3 flex gap-2">
-                    <Badge variant={getStatusVariant(lead.status)}>
-                      {statusLabels[lead.status]}
-                    </Badge>
+                    <div className="absolute top-3 right-3">
+                      <span className={`text-sm font-bold ${getPriorityColor(lead.priority)}`}>
+                        {priorityLabels[lead.priority]}
+                      </span>
+                    </div>
                   </div>
-                  <div className="absolute top-3 right-3">
-                    <span className={`text-sm font-bold ${getPriorityColor(lead.priority)}`}>
-                      {priorityLabels[lead.priority]}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="p-4">
-                  <h3 className="font-bold text-lg text-primary group-hover:text-accent transition-colors">
-                    {lead.project_name}
-                  </h3>
                   
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">行业</span>
-                      <span className="font-medium">{industryLabels[lead.industry]}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">官网状态</span>
-                      <span className="font-medium">{websiteStatusLabels[lead.website_status]}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">可信度</span>
-                      <span className="font-medium">{credibilityLabels[lead.credibility]}</span>
-                    </div>
-                    {lead.funding_info && (
+                  <div className="p-4">
+                    <h3 className="font-bold text-lg text-primary group-hover:text-accent transition-colors">
+                      {lead.project_name}
+                    </h3>
+                    
+                    <div className="mt-3 space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">融资</span>
-                        <span className="font-medium text-accent">
-                          {lead.funding_info.round} · {lead.funding_info.amount}
-                        </span>
+                        <span className="text-gray-500">行业</span>
+                        <span className="font-medium">{industryLabels[lead.industry]}</span>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <Calendar size={14} />
-                      {format(new Date(lead.created_at), 'MM/dd', { locale: zhCN })}
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">官网状态</span>
+                        <span className="font-medium">{websiteStatusLabels[lead.website_status]}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">可信度</span>
+                        <span className="font-medium">{credibilityLabels[lead.credibility]}</span>
+                      </div>
+                      {lead.funding_info && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500">融资</span>
+                          <span className="font-medium text-accent">
+                            {lead.funding_info.round} · {lead.funding_info.amount}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    {assignee && (
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={assignee.avatar}
-                          alt={assignee.name}
-                          className="w-6 h-6 rounded-full"
-                        />
-                        <span className="text-sm text-gray-600">{assignee.name}</span>
+
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <Calendar size={14} />
+                        {format(new Date(lead.created_at), 'MM/dd', { locale: zhCN })}
                       </div>
-                    )}
+                      {assignee && (
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={assignee.avatar}
+                            alt={assignee.name}
+                            className="w-6 h-6 rounded-full"
+                          />
+                          <span className="text-sm text-gray-600">{assignee.name}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardBody>
-            </Card>
+                </CardBody>
+              </Card>
             </React.Fragment>
           );
         })}

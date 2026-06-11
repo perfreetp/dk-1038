@@ -1,8 +1,9 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Card, CardHeader, CardBody, CardFooter, Button, Input, Textarea, Select } from '../components/common';
+import { Card, CardHeader, CardBody, Button, Input, Textarea, Select } from '../components/common';
 import { useLeads, useApp } from '../contexts/AppContext';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Upload, Image as ImageIcon } from 'lucide-react';
+import { users } from '../data/mockData';
 
 export function NewLead() {
   const navigate = useNavigate();
@@ -16,8 +17,10 @@ export function NewLead() {
     credibility: '',
     priority: '',
     shutdown_evidence: '',
+    assignee: '',
   });
 
+  const [screenshots, setScreenshots] = React.useState<string[]>([]);
   const [newsSources, setNewsSources] = React.useState<string[]>(['']);
   const [fundingRound, setFundingRound] = React.useState('');
   const [fundingAmount, setFundingAmount] = React.useState('');
@@ -43,6 +46,24 @@ export function NewLead() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setScreenshots(prev => [...prev, event.target!.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeScreenshot = (index: number) => {
+    setScreenshots(prev => prev.filter((_, i) => i !== index));
+  };
+
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
@@ -50,7 +71,7 @@ export function NewLead() {
     addLead({
       project_name: formData.project_name,
       website_status: formData.website_status as any,
-      screenshots: [],
+      screenshots: screenshots,
       news_sources: newsSources.filter(s => s.trim() !== ''),
       funding_info: fundingRound && fundingAmount 
         ? { round: fundingRound, amount: fundingAmount }
@@ -59,6 +80,7 @@ export function NewLead() {
       industry: formData.industry as any,
       credibility: formData.credibility as any,
       priority: formData.priority as any,
+      assignee: formData.assignee || undefined,
       status: 'new',
       created_by: state.currentUser.id,
     });
@@ -165,6 +187,56 @@ export function NewLead() {
                 value={formData.priority}
                 onChange={(v) => updateForm('priority', v)}
               />
+            </div>
+
+            <Select
+              label="负责人"
+              options={[
+                { value: '', label: '暂不分配' },
+                ...users.filter(u => u.role === 'editor').map(u => ({
+                  value: u.id,
+                  label: u.name,
+                })),
+              ]}
+              value={formData.assignee}
+              onChange={(v) => updateForm('assignee', v)}
+            />
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <h3 className="font-semibold">产品截图</h3>
+            <p className="text-sm text-gray-500 font-normal">上传产品页面截图</p>
+          </CardHeader>
+          <CardBody>
+            <div className="grid grid-cols-4 gap-4">
+              {screenshots.map((screenshot, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={screenshot}
+                    alt={`截图 ${index + 1}`}
+                    className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeScreenshot(index)}
+                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-accent hover:bg-gray-50 transition-colors">
+                <Upload size={24} className="text-gray-400 mb-2" />
+                <span className="text-sm text-gray-500">上传截图</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleScreenshotUpload}
+                  className="hidden"
+                />
+              </label>
             </div>
           </CardBody>
         </Card>
